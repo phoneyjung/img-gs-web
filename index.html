@@ -131,7 +131,7 @@
     <span class="flabel2">ร้าน</span>
     <div class="chips" id="chips"></div>
     <div class="addfolder" id="addfolder" style="display:none">
-      <input type="text" id="newfolder" placeholder="ชื่อร้าน (อังกฤษ/ตัวเลข)" autocomplete="off" spellcheck="false">
+      <input type="text" id="newfolder" placeholder="ชื่อร้าน (ไทยหรืออังกฤษก็ได้)" autocomplete="off" spellcheck="false">
       <button class="btn sm" id="addfolderbtn">เพิ่ม</button>
       <button class="btn sm ghost" id="cancelfolder">ยกเลิก</button>
     </div>
@@ -140,7 +140,7 @@
     <span class="flabel2 two">แยกประเภทย่อย (ในร้าน)</span>
     <div class="chips" id="subchips"></div>
     <div class="addfolder" id="subadd" style="display:none">
-      <input type="text" id="subinput" placeholder="ชื่อประเภทย่อย เช่น promo, therapist (อังกฤษ/ตัวเลข)" autocomplete="off" spellcheck="false">
+      <input type="text" id="subinput" placeholder="ชื่อประเภทย่อย (ไทย/อังกฤษ) เช่น รูปพนักงาน, promo" autocomplete="off" spellcheck="false">
       <button class="btn sm" id="addsubbtn">เพิ่ม</button>
       <button class="btn sm ghost" id="cancelsub">ยกเลิก</button>
     </div>
@@ -195,6 +195,7 @@
   function setSel(slug){selSlug=slug;selSub="";try{localStorage.setItem(LS_SEL,slug);localStorage.setItem(LS_SELSUB,"");}catch(e){}renderChips();}
   function setSelSub(s){selSub=s;try{localStorage.setItem(LS_SELSUB,s);}catch(e){}renderSubs();updateDrop();}
   function slugify(s){return String(s).toLowerCase().trim().replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"").slice(0,40);}
+  function genCode(prefix,existing){var n=1;while(existing.indexOf(prefix+n)!==-1)n++;return prefix+n;}
 
   var $=function(id){return document.getElementById(id);};
   var keybox=$("keybox"),urlinput=$("urlinput"),keyinput=$("keyinput"),list=$("list"),empty=$("empty"),drop=$("drop"),fileInput=$("file");
@@ -243,19 +244,25 @@
   function removeSub(shop,slug){var arr=subs[shop]||[];subs[shop]=arr.filter(function(s){return s.slug!==slug;});saveSubs(subs);
     if(selSub===slug)setSelSub("");else renderSubs();}
   $("addfolderbtn").onclick=function(){
-    var raw=newfolder.value.trim(),slug=slugify(raw);
-    if(!slug){addhint.textContent="ใช้ตัวอักษรอังกฤษหรือตัวเลข เช่น laundry, solar";return;}
-    var a=allFolders();for(var i=0;i<a.length;i++){if(a[i].slug===slug){setSel(slug);addfolder.style.display="none";return;}}
-    customFolders.push({label:raw||slug,slug:slug,color:"#5b1117"});saveCustom(customFolders);addfolder.style.display="none";setSel(slug);
+    var raw=newfolder.value.trim();
+    if(!raw){addhint.textContent="พิมพ์ชื่อร้านก่อนครับ";return;}
+    var existing=allFolders().map(function(f){return f.slug;});
+    var asc=slugify(raw);
+    if(asc){for(var i=0;i<existing.length;i++){if(existing[i]===asc){setSel(asc);addfolder.style.display="none";return;}}}
+    var slug=asc||genCode("s",existing);
+    customFolders.push({label:raw,slug:slug,color:"#5b1117"});saveCustom(customFolders);addfolder.style.display="none";setSel(slug);
   };
   $("cancelfolder").onclick=function(){addfolder.style.display="none";addhint.textContent="";};
   newfolder.addEventListener("keydown",function(e){if(e.key==="Enter")$("addfolderbtn").click();});
   $("addsubbtn").onclick=function(){
-    var raw=subinput.value.trim(),slug=slugify(raw);
-    if(!slug){subhint.textContent="ใช้ตัวอักษรอังกฤษหรือตัวเลข เช่น promo, therapist";return;}
+    var raw=subinput.value.trim();
+    if(!raw){subhint.textContent="พิมพ์ชื่อประเภทก่อนครับ";return;}
     var shop=curShop();if(!subs[shop.slug])subs[shop.slug]=[];var arr=subs[shop.slug];
-    for(var i=0;i<arr.length;i++){if(arr[i].slug===slug){setSelSub(slug);subadd.style.display="none";return;}}
-    arr.push({label:raw||slug,slug:slug});saveSubs(subs);subadd.style.display="none";setSelSub(slug);
+    var existing=arr.map(function(s){return s.slug;});
+    var asc=slugify(raw);
+    if(asc){for(var i=0;i<existing.length;i++){if(existing[i]===asc){setSelSub(asc);subadd.style.display="none";return;}}}
+    var slug=asc||genCode("f",existing);
+    arr.push({label:raw,slug:slug});saveSubs(subs);subadd.style.display="none";setSelSub(slug);
   };
   $("cancelsub").onclick=function(){subadd.style.display="none";subhint.textContent="";};
   subinput.addEventListener("keydown",function(e){if(e.key==="Enter")$("addsubbtn").click();});
