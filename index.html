@@ -75,7 +75,7 @@
   .drop .big b{color:var(--brand);font-style:normal}
   .drop .small{font-size:12.5px;color:var(--ink-soft);margin-top:5px}
   .drop input{display:none}
-  .list{margin-top:22px;display:flex;flex-direction:column;gap:13px}
+  .list{margin-top:10px;display:flex;flex-direction:column;gap:13px}
   .card{border:1px solid var(--line);background:var(--paper-2);border-radius:var(--radius);padding:13px;display:flex;gap:13px;align-items:flex-start;box-shadow:0 1px 0 #fff inset,0 6px 18px -14px rgba(40,30,10,.5);animation:pop .4s both}
   .thumb{width:74px;height:74px;flex-shrink:0;border-radius:8px;overflow:hidden;border:1px solid var(--line);background:#fff;display:flex;align-items:center;justify-content:center;position:relative}
   .thumb img{width:100%;height:100%;object-fit:cover;display:block;cursor:zoom-in}
@@ -102,6 +102,12 @@
   .del-sub:disabled{opacity:.6;cursor:default}
   .cerr{flex:1;color:var(--brand);font-size:12.5px;align-self:center}
   .empty{text-align:center;color:var(--ink-faint);font-size:13px;padding:24px 0 0;font-style:italic}
+  .warn{display:none;margin-top:12px;background:#f6ebe9;border:1px solid var(--brand);color:var(--brand-deep);border-radius:10px;padding:11px 14px;font-size:13px;text-align:center;font-weight:500}
+  .viewing{margin-top:20px;font-size:12px;color:var(--ink-faint);font-weight:500}
+  .progress{display:none;margin-top:12px}
+  .pbar{height:8px;background:var(--line-soft);border-radius:999px;overflow:hidden}
+  .pbar span{display:block;height:100%;background:var(--brand);width:0;transition:width .3s}
+  .ptext{font-size:12px;color:var(--ink-soft);margin-top:6px;text-align:center;font-weight:500}
   footer{text-align:center;margin-top:38px;font-size:11px;color:var(--ink-faint);line-height:1.8}
   footer .k{color:var(--brand)}
   @keyframes rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
@@ -160,7 +166,10 @@
     <div class="small">หรือกดเพื่อเลือกไฟล์ · วางจากคลิปบอร์ดก็ได้ (Ctrl+V)</div>
     <input type="file" id="file" accept="image/*" multiple>
   </div>
+  <div class="warn" id="warn"></div>
+  <div class="progress" id="progress"></div>
 
+  <div class="viewing" id="viewing"></div>
   <div class="list" id="list"></div>
   <div class="empty" id="empty">— ยังไม่มีรูป อัปรูปแรกได้เลย —</div>
 
@@ -199,8 +208,8 @@
     for(var i=0;i<arr.length;i++)if(arr[i].slug===selSub){sub=arr[i].slug;sl=arr[i].label;break;}
     return {pathSlug:sub?shop.slug+"/"+sub:shop.slug, label:sub?shop.label+" / "+sl:shop.label, color:shop.color};
   }
-  function setSel(slug){selSlug=slug;selSub="";try{localStorage.setItem(LS_SEL,slug);localStorage.setItem(LS_SELSUB,"");}catch(e){}renderChips();}
-  function setSelSub(s){selSub=s;try{localStorage.setItem(LS_SELSUB,s);}catch(e){}renderSubs();updateDrop();}
+  function setSel(slug){selSlug=slug;selSub="";try{localStorage.setItem(LS_SEL,slug);localStorage.setItem(LS_SELSUB,"");}catch(e){}renderChips();renderList();}
+  function setSelSub(s){selSub=s;try{localStorage.setItem(LS_SELSUB,s);}catch(e){}renderSubs();updateDrop();renderList();}
   function slugify(s){return String(s).toLowerCase().trim().replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"").slice(0,40);}
   function genCode(prefix,existing){var n=1;while(existing.indexOf(prefix+n)!==-1)n++;return prefix+n;}
   var editShop=null,editSub=null;
@@ -220,6 +229,30 @@
   var keybox=$("keybox"),urlinput=$("urlinput"),keyinput=$("keyinput"),list=$("list"),empty=$("empty"),drop=$("drop"),fileInput=$("file");
   var chips=$("chips"),subchips=$("subchips"),addfolder=$("addfolder"),newfolder=$("newfolder"),addhint=$("addhint");
   var subadd=$("subadd"),subinput=$("subinput"),subhint=$("subhint"),droptarget=$("droptarget");
+  var warn=$("warn"),viewing=$("viewing"),progress=$("progress");
+  var _chain=Promise.resolve(),GAP_MS=900;
+  function gap(){return new Promise(function(r){setTimeout(r,GAP_MS);});}
+  function serial(fn){var p=_chain.then(fn,fn);_chain=p.then(gap,gap);return p;}
+  var upTotal=0,upDone=0;
+  function renderProgress(){
+    if(!progress)return;
+    if(upDone>=upTotal){progress.style.display="none";upTotal=0;upDone=0;return;}
+    progress.style.display="block";var pct=upTotal?Math.round(upDone/upTotal*100):0;
+    progress.innerHTML='<div class="pbar"><span style="width:'+pct+'%"></span></div><div class="ptext">กำลังอัป '+upDone+'/'+upTotal+' รูป…</div>';
+  }
+  function upStart(n){if(upTotal===upDone){upTotal=0;upDone=0;}upTotal+=n;renderProgress();}
+  function upFinishOne(){upDone++;renderProgress();}
+  function recPath(r){return r.path||pathFromDirect(r.direct);}
+  function curPrefix(){var s=curShop();return selSub?(s.slug+"/"+selSub+"/"):(s.slug+"/");}
+  function filteredHist(){var p=curPrefix();return loadHist().filter(function(r){return recPath(r).indexOf(p)===0;});}
+  function emptyText(){return loadHist().length?"— ไม่มีรูปในหัวข้อนี้ —":"— ยังไม่มีรูป อัปรูปแรกได้เลย —";}
+  function updateViewing(){if(viewing)viewing.textContent="กำลังดู: "+curFolder().label+(selSub?"":" · ทั้งร้าน")+" · "+filteredHist().length+" รูป";}
+  function renderList(){
+    list.innerHTML="";var h=filteredHist();
+    if(!h.length){empty.style.display="";empty.textContent=emptyText();}
+    else{empty.style.display="none";h.forEach(function(rec){var c=document.createElement("div");c.className="card";c.style.animation="none";renderResult(c,rec);list.appendChild(c);});}
+    updateViewing();
+  }
 
   function updateDrop(){if(droptarget)droptarget.textContent=curFolder().label;}
   function renderChips(){
@@ -348,10 +381,10 @@
         armT=setTimeout(function(){armed=false;del.textContent="ลบรูป";del.classList.remove("arm");},3000);return;}
       clearTimeout(armT);del.disabled=true;del.textContent="กำลังลบ…";
       var p=d.path||pathFromDirect(d.direct);
-      fetch(gURL(),{method:"POST",headers:{"Content-Type":"application/json","X-Upload-Key":gKey()},body:JSON.stringify({action:"delete",path:p})})
-        .then(function(r){return r.json();}).then(function(j){
+      serial(function(){return fetch(gURL(),{method:"POST",headers:{"Content-Type":"application/json","X-Upload-Key":gKey()},body:JSON.stringify({action:"delete",path:p})}).then(function(r){return r.json();});})
+        .then(function(j){
           if(j&&j.success){var h=loadHist().filter(function(r){return r.direct!==d.direct;});saveHist(h);
-            card.parentNode&&card.parentNode.removeChild(card);if(!list.children.length)empty.style.display="";}
+            card.parentNode&&card.parentNode.removeChild(card);updateViewing();if(!list.children.length){empty.style.display="";empty.textContent=emptyText();}}
           else{del.disabled=false;del.classList.remove("arm");del.textContent="ลบไม่ได้: "+((j&&j.error)||"error");}
         }).catch(function(){del.disabled=false;del.classList.remove("arm");del.textContent="ลบไม่ได้ ลองใหม่";});
     };
@@ -375,29 +408,32 @@
   function uploadFile(file){
     empty.style.display="none";
     var refs=loadingCard();list.insertBefore(refs.card,list.firstChild);
-    if(!file.type||file.type.indexOf("image/")!==0){errorCard(refs,"ไฟล์นี้ไม่ใช่รูปภาพ");return;}
-    if(file.size>MAX){errorCard(refs,"ไฟล์ใหญ่เกิน 20MB");return;}
-    var url=gURL();if(!url){errorCard(refs,"ยังไม่ได้ตั้งค่า Worker URL — ใส่ด้านบนก่อนครับ");keybox.classList.remove("collapsed");return;}
+    var counted=false;function markDone(){if(!counted){counted=true;upFinishOne();}}
+    if(!file.type||file.type.indexOf("image/")!==0){errorCard(refs,"ไฟล์นี้ไม่ใช่รูปภาพ");markDone();return;}
+    if(file.size>MAX){errorCard(refs,"ไฟล์ใหญ่เกิน 20MB");markDone();return;}
+    var url=gURL();if(!url){errorCard(refs,"ยังไม่ได้ตั้งค่า Worker URL — ใส่ด้านบนก่อนครับ");keybox.classList.remove("collapsed");markDone();return;}
     var fld=curFolder(),ext=getExt(file);
     fileToB64(file).then(function(b64){
       var dataUri="data:"+(file.type||"image/png")+";base64,"+b64;
       function showThumb(){refs.thumb.className="thumb";refs.thumb.innerHTML="";var im=document.createElement("img");im.src=dataUri;refs.thumb.appendChild(im);}
       function setLoading(txt){showThumb();refs.body.innerHTML='<div class="cname">'+(txt||"กำลังอัปโหลด…")+'</div>';}
-      function post(name,overwrite){return fetch(url,{method:"POST",headers:{"Content-Type":"application/json","X-Upload-Key":gKey()},
+      function post(name,overwrite){return serial(function(){return fetch(url,{method:"POST",headers:{"Content-Type":"application/json","X-Upload-Key":gKey()},
         body:JSON.stringify({content:b64,ext:ext,folder:fld.pathSlug,name:name,overwrite:overwrite})})
-        .then(function(r){return r.json().then(function(j){return {ok:r.ok,status:r.status,j:j};});});}
+        .then(function(r){return r.json().then(function(j){return {ok:r.ok,status:r.status,j:j};});});});}
       function finish(j){var rec={direct:j.direct,thumb:j.raw||dataUri,name:j.name,time:Date.now(),folderLabel:fld.label,folderColor:fld.color,path:j.path};
-        renderResult(refs.card,rec);var h=loadHist();h.unshift(rec);saveHist(h);}
-      function fail(o){var j=o.j;errorCard(refs,(j&&j.error)?j.error:("เกิดข้อผิดพลาด ("+o.status+")"));}
+        renderResult(refs.card,rec);var h=loadHist();h.unshift(rec);saveHist(h);updateViewing();markDone();}
+      function failMsg(m){errorCard(refs,m);markDone();}
+      function fail(o){var j=o.j;failMsg((j&&j.error)?j.error:("เกิดข้อผิดพลาด ("+o.status+")"));}
       function send(name,overwrite){setLoading();post(name,overwrite).then(function(o){var j=o.j;
         if(j&&j.exists){conflict(name);return;}
         if(!(j&&j.success&&j.direct)){fail(o);return;}finish(j);
-      }).catch(function(err){errorCard(refs,"เชื่อมต่อไม่ได้: "+(err&&err.message?err.message:"network"));});}
+      }).catch(function(err){failMsg("เชื่อมต่อไม่ได้: "+(err&&err.message?err.message:"network"));});}
       function autoRename(name,n){setLoading("กำลังหาชื่อว่าง…");post(name+"-"+n,false).then(function(o){var j=o.j;
-        if(j&&j.exists){if(n<99)autoRename(name,n+1);else errorCard(refs,"ชื่อซ้ำเยอะเกินไป ลองเปลี่ยนชื่อไฟล์");return;}
+        if(j&&j.exists){if(n<99)autoRename(name,n+1);else failMsg("ชื่อซ้ำเยอะเกินไป ลองเปลี่ยนชื่อไฟล์");return;}
         if(!(j&&j.success&&j.direct)){fail(o);return;}finish(j);
-      }).catch(function(err){errorCard(refs,"เชื่อมต่อไม่ได้: "+(err&&err.message?err.message:"network"));});}
+      }).catch(function(err){failMsg("เชื่อมต่อไม่ได้: "+(err&&err.message?err.message:"network"));});}
       function conflict(name){
+        markDone();
         showThumb();refs.body.innerHTML="";
         var t=document.createElement("div");t.className="cname";t.textContent='ชื่อ "'+name+"."+ext+'" มีอยู่แล้ว';
         var m=document.createElement("div");m.className="cnote";m.textContent="ในโฟลเดอร์ "+fld.label+" — จะเอายังไงต่อ?";
@@ -408,9 +444,18 @@
         refs.body.appendChild(t);refs.body.appendChild(m);refs.body.appendChild(row);
       }
       send(baseName(file.name),false);
-    }).catch(function(e){errorCard(refs,"อ่านไฟล์ไม่ได้");});
+    }).catch(function(e){errorCard(refs,"อ่านไฟล์ไม่ได้");markDone();});
   }
-  function handleFiles(fl){Array.prototype.slice.call(fl).filter(function(f){return f&&f.type&&f.type.indexOf("image/")===0;}).forEach(function(f){uploadFile(f);});}
+  var warnT=null;
+  function showWarn(msg){if(!warn)return;warn.textContent=msg;warn.style.display="block";clearTimeout(warnT);warnT=setTimeout(function(){warn.style.display="none";},6000);}
+  function handleFiles(fl){
+    var arr=Array.prototype.slice.call(fl).filter(function(f){return f&&f.type&&f.type.indexOf("image/")===0;});
+    if(arr.length>50){showWarn("ลากได้ครั้งละไม่เกิน 50 รูป (คุณลากมา "+arr.length+" รูป) — ช่วยแบ่งลากเป็นชุดละไม่เกิน 50 รูปนะครับ");return;}
+    if(!arr.length)return;
+    if(warn)warn.style.display="none";
+    upStart(arr.length);
+    arr.forEach(function(f){uploadFile(f);});
+  }
 
   drop.addEventListener("click",function(){fileInput.click();});
   drop.addEventListener("keydown",function(e){if(e.key==="Enter"||e.key===" ")fileInput.click();});
@@ -425,7 +470,7 @@
   function restore(){var h=loadHist();if(h&&h.length){empty.style.display="none";
     h.forEach(function(rec){var card=document.createElement("div");card.className="card";card.style.animation="none";renderResult(card,rec);list.appendChild(card);});}}
 
-  renderChips();refreshPanel();restore();
+  renderChips();refreshPanel();renderList();
 })();
 </script>
 </body>
