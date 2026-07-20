@@ -173,7 +173,7 @@
   <div class="warn" id="warn"></div>
   <div class="progress" id="progress"></div>
 
-  <div class="viewrow"><div class="viewing" id="viewing"></div><button class="refreshbtn" id="refreshbtn">↻ รีเฟรช</button></div>
+  <div class="viewrow"><div class="viewing" id="viewing"></div><button class="refreshbtn" id="copyallbtn">📋 ก๊อปชื่อ+ลิงก์</button><button class="refreshbtn" id="refreshbtn">↻ รีเฟรช</button></div>
   <div class="list" id="list"></div>
   <div class="empty" id="empty">— ยังไม่มีรูป อัปรูปแรกได้เลย —</div>
 
@@ -279,6 +279,26 @@
     else{empty.style.display="none";h.forEach(function(rec){var c=document.createElement("div");c.className="card";c.style.animation="none";renderResult(c,rec);list.appendChild(c);});}
     updateViewing();
   }
+
+  // 📋 ก๊อปทั้งชุดที่กำลังดู — ชื่อบรรทัดนึง ลิงก์บรรทัดนึง (เว้นบรรทัดคั่นแต่ละรูป)
+  $("copyallbtn").onclick=function(){
+    var h=filteredHist();
+    var b=$("copyallbtn");
+    if(!h.length){b.textContent="— ไม่มีรูป —";setTimeout(function(){b.textContent="\ud83d\udccb ก๊อปชื่อ+ลิงก์";},1500);return;}
+    var txt=h.map(function(r){
+      var nm=String(r.name||recPath(r).split("/").pop()||"").replace(/\.[a-z0-9]+$/i,"");
+      return nm+"\n"+(r.direct||"");
+    }).join("\n\n");
+    function done(){b.textContent="\u2713 ก๊อปแล้ว "+h.length+" รูป";setTimeout(function(){b.textContent="\ud83d\udccb ก๊อปชื่อ+ลิงก์";},1800);}
+    function fallback(){
+      var ta=document.createElement("textarea");ta.value=txt;ta.style.position="fixed";ta.style.opacity="0";
+      document.body.appendChild(ta);ta.focus();ta.select();
+      try{document.execCommand("copy");done();}catch(e){alert("ก๊อปไม่ได้ — เลือกข้อความเองจากกล่องถัดไป\n\n"+txt.slice(0,400)+"…");}
+      ta.remove();
+    }
+    if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(txt).then(done).catch(fallback);}
+    else fallback();
+  };
 
   function updateDrop(){if(droptarget)droptarget.textContent=curFolder().label;}
   function renderChips(){
